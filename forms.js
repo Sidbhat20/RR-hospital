@@ -137,6 +137,28 @@
           RR.App.commit('Register line added', snap);
         });
     },
+    settle(id) {
+      const c = RR.db.claims.find(x => x.id === id);
+      RR.drawer('Record settlement', `${c.id} · ${c.payer} · ${c.patient}`,
+        `<dl class="kv"><dt>Claimed</dt><dd>${inr(c.amount)}</dd><dt>Submitted</dt><dd>${RR.date(c.submitted)} · ${RR.claimAge(c)} days ago</dd>${c.note ? `<dt>Query</dt><dd>${esc(c.note)}</dd>` : ''}</dl>` +
+        fld('amount', 'Amount received (₹)', inp('amount', c.amount, 'inputmode="numeric"'), 'If the TPA paid less, enter what reached the bank.') +
+        fld('note', 'Reason for any deduction', inp('note', '', 'placeholder="e.g. Non-payable consumables"')),
+        'Record settlement', d => {
+          const amount = money(d.amount), e = {};
+          if (!(amount > 0)) e.amount = 'Enter the amount received.'; else if (amount > c.amount) e.amount = 'Can’t be more than the ' + inr(c.amount) + ' claimed.';
+          if (Object.keys(e).length) return e;
+          const snap = RR.snapshot(); RR.settleClaim(id, amount, d.note.trim());
+          RR.App.commit(amount < c.amount ? `${c.id} settled ${inr(c.amount - amount)} short` : c.id + ' settled in full', snap);
+        });
+    },
+    tally() {
+      const cur = RR.period, opts = Object.keys(RR.PERIODS).map(k => { const e = RR.tallyExport(k); return [k, `${RR.PERIODS[k]} · ${e.sales} sales, ${e.receipts} receipts`]; });
+      RR.drawer('Send to Tally', 'An XML file TallyPrime and Tally ERP 9 import directly',
+        fld('period', 'Period', sel('period', opts, cur)) +
+        `<div class="tally-what"><b>What goes in</b><ul><li>A <b>Sales</b> voucher for each bill, split between the patient and the insurer</li><li>A <b>Receipt</b> for each payment, posted to Cash, UPI, Card or the bank</li><li>Insurer settlements, with any TPA deduction posted to <b>${esc(RR.CONFIG.tally.deductions)}</b></li><li>Missing ledgers are created under the right groups</li></ul></div>` +
+        `<p class="f-hint">In Tally: Gateway › Import › Transactions, then choose the file. Ledger names can be matched to your chart of accounts in config.js.</p>`,
+        'Download for Tally', d => { const e = RR.downloadTally(d.period); RR.toast(`Tally file saved · ${e.sales} sales, ${e.receipts} receipts`); });
+    },
     paperReview(id) {
       const rec = RR.db.paper.find(p => p.id === id), f = RR.parsePaper(rec.text);
       RR.drawer('Review ' + rec.id, rec.source,

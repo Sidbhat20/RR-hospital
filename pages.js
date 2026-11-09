@@ -58,7 +58,7 @@
   P.billing = () => {
     const k = RR.kpis(), all = RR.db.invoices.filter(i => i.status !== 'void' && RR.inPeriod(i.date));
     const cnt = s => (s === 'all' ? all.length : all.filter(i => i.status === s).length);
-    return `<div class="page">${head('Billing', `${RR.PERIODS[per()]} · ${span()}`, `<button class="btn btn-outline" data-act="export">${icon('download')}Export</button><button class="btn btn-primary" data-act="new-invoice">${icon('plus')}New invoice</button>`)}
+    return `<div class="page">${head('Billing', `${RR.PERIODS[per()]} · ${span()}`, `<button class="btn btn-outline" data-act="export">${icon('download')}Export</button><button class="btn btn-outline" data-act="tally">${icon('tally')}Send to Tally</button><button class="btn btn-primary" data-act="new-invoice">${icon('plus')}New invoice</button>`)}
       ${RR.kpiStrip([deltaK('Billed', k.billed, k.billedPrev, true, { note: k.bills + ' bills · ' + k.patients + ' patients' }), deltaK('Collected', k.collected, k.collectedPrev, true),
         { label: 'Realisation', value: pct(k.collectRate), note: 'collected ÷ billed' }, { label: 'Overdue, all time', value: inrShort(k.overdue), count: k.overdue, neg: k.overdue > 0, note: k.overdueCount + ' bills' }])}
       <section class="card flush"><div class="toolbar">

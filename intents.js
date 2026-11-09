@@ -240,6 +240,30 @@
     return { text: ['Ask the way you’d ask a colleague: “How much did we bill today?”, “Who still owes us?”, “What’s Priya Shah’s balance?” or “Bill Priya Shah ₹12,000 for an MRI.”', 'Answers come back as text. Say “show the chart” or “list them” when you want to see the numbers laid out.'] };
   }
 
+  /* ---------- claims, closing, Tally ---------- */
+  function claims(s) {
+    const c = RR.claims(), out = { text: [`**${inr(c.stuckValue)}** is stuck with TPAs for over 30 days, across ${c.stuck.length} claims. In all, ${inr(c.openValue)} is open with insurers on ${c.open.length} claims${c.queried.length ? `, and ${c.queried.length} are queried and waiting on us` : ''}.`] };
+    const slow = c.payers.slice().sort((a, b) => b.avgDays - a.avgDays)[0];
+    if (slow) out.text.push(`${slow.payer} is the slowest, ${slow.avgDays} days on average. Deductions on short-paid claims have cost ${inr(c.shortValue)}.`);
+    out.blocks = [];
+    if (wantsChart(s)) out.blocks.push(blk('Open claims by insurer', 'Amount waiting', RR.hbars(c.payers.map(p => ({ label: p.payer, sub: p.avgDays + ' days avg', value: p.open })))));
+    if (wantsTable(s)) out.blocks.push(blk('Stuck over 30 days', c.stuck.length + ' claims', RR.table(c.stuck.slice().sort((a, b) => b.amount - a.amount).slice(0, 10), [{ h: 'Claim', f: x => `${esc(x.id)}<span class="sub">${esc(x.patient)}</span>` }, { h: 'Insurer', f: x => esc(x.payer) }, { h: 'Days', num: 1, f: x => RR.claimAge(x) }, { h: 'Amount', num: 1, f: x => inr(x.amount) }], { compact: 1 }), { flush: 1 }));
+    out.blocks.push({ html: openLink('claims', 'Open claims') });
+    return out;
+  }
+  function closing(s) {
+    const c = RR.closing(), r = c.rec;
+    const t = [`Today the desk took **${inr(c.desk)}**: cash ${inr(c.ledger.cash)}, UPI ${inr(c.ledger.upi)}, card ${inr(c.ledger.card)}, against ${inr(c.billed)} billed. ${inr(c.dueFromPatients)} is still owed by patients and ${inr(c.withInsurers)} goes to insurers.`];
+    t.push(r ? (c.diff ? `The day was closed **${c.diff > 0 ? 'over' : 'short'} by ${inr(Math.abs(c.diff))}**.` : 'The day is closed and everything matched.') : 'The day hasn’t been closed yet.');
+    const miss = RR.recentClosings(8).slice(1).filter(x => x.rec && x.diff);
+    if (miss.length) t.push(`In the last week the drawer didn’t match on ${miss.length === 1 ? RR.date(miss[0].day) : miss.length + ' days'}${miss.length === 1 ? ` (${miss[0].diff > 0 ? 'over' : 'short'} ${inr(Math.abs(miss[0].diff))})` : ''}.`);
+    return { text: t, blocks: [{ html: openLink('closing', 'Open daily closing') }] };
+  }
+  function tally(p) {
+    const e = RR.tallyExport(p);
+    return { text: [`For ${RR.periodPhrase(p)} that’s ${e.sales} sales vouchers and ${e.receipts} receipts, ${inr(e.total)} billed, as a file TallyPrime imports directly.`], blocks: [{ html: `<div><button class="btn btn-outline btn-sm" data-tally-dl="${p}">${icon('download')}Download for Tally</button></div>` }] };
+  }
+
   /* ---------- router ----------
      ctx remembers the last topic + period, so follow-ups like
      "pull up the chart", "and this week?" or "list them" continue it. */
@@ -265,6 +289,10 @@
     if (/^(bill|charge|raise|invoice)\b.*(₹|rs|\d)/.test(s) || /\b(bill|charge)\b [a-z]+ [a-z]+ .*(₹|rs\.?\s?\d|\d)/.test(s) && !/\bbills?\b (today|this)/.test(s)) return createInvoice(q);
     if (/^(log|record|add)\b.*(expense|spend|purchase|restock|₹|\d)/.test(s)) return logExpense(q);
     if (/payroll|salar|staff cost/.test(s)) return payroll(s);
+    if (/\btally\b|accountant|\bxml\b|export (to|for) (the )?account/.test(s)) return tally(p);
+    if (/\bclaims?\b|\btpa\b|stuck|short.?paid|quer(y|ied)|settle/.test(s)) { remember((pp, ss) => claims(ss), p); return claims(s); }
+    if (/clos(e|ing)|drawer|cash ?(in|at) (the )?(hand|desk|counter)|reconcil|tally up|match(es|ed)? the|counter/.test(s)) { remember((pp, ss) => closing(ss), p); return closing(s); }
+    if (/\b(photo|picture|camera|scan) (a |the |of )?(page|register)|scan a page/.test(s)) return { text: ['Open **Scan a page**, take a photo of the register and each line comes back as a draft bill to check and approve.'], blocks: [{ html: openLink('scan', 'Scan a page') }] };
     if (/digiti|paper|register|scan|handwritten/.test(s)) return digitise(s);
     if (/duplicate|double.?(bill|charg)/.test(s)) { remember((pp, ss) => duplicates(ss), p); return duplicates(s); }
     if (/denial|risk|reject/.test(s)) { remember((pp, ss) => risk(ss), p); return risk(s); }

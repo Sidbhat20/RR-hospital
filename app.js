@@ -6,10 +6,11 @@
   const S = RR.pageState;
 
   const NAV = [
-    ['copilot', 'Ask', 'spark'], ['overview', 'Overview', 'home'], ['billing', 'Billing', 'receipt'], ['payments', 'Payments', 'card'],
-    ['expenses', 'Expenses', 'wallet'], ['payroll', 'Payroll', 'users'], ['patients', 'Patients', 'heart'], ['departments', 'Departments', 'building'], ['records', 'Paper records', 'scan'],
+    ['copilot', 'Ask', 'spark'], ['overview', 'Overview', 'home'], ['billing', 'Billing', 'receipt'], ['closing', 'Daily closing', 'cash'], ['claims', 'Insurance claims', 'shield'], ['payments', 'Payments', 'card'],
+    ['expenses', 'Expenses', 'wallet'], ['payroll', 'Payroll', 'users'], ['patients', 'Patients', 'heart'], ['departments', 'Departments', 'building'], ['scan', 'Scan a page', 'camera'], ['records', 'Paper records', 'scan'],
   ];
-  const TITLES = Object.fromEntries(NAV.map(n => [n[0], n[1]]));
+  const HIDDEN = { proposal: 'Proposal' };
+  const TITLES = Object.assign(Object.fromEntries(NAV.map(n => [n[0], n[1]])), HIDDEN);
   /* phone: four tabs + More */
   const TABS = ['copilot', 'overview', 'billing', 'patients'];
   const mobile = () => matchMedia('(max-width: 860px)').matches;
@@ -33,7 +34,7 @@
   function moreHTML() {
     const dg = RR.digitisation(), logs = RR.Chat.logs().slice(0, 6);
     const item = (id, sub) => { const n = NAV.find(x => x[0] === id); return `<button class="sheet-item" data-nav="${id}"${st.page === id ? ' aria-current="page"' : ''}>${icon(n[2])}<span>${n[1]}</span>${sub ? `<em>${sub}</em>` : ''}</button>`; };
-    return `<div class="sheet-group">${['payments', 'expenses', 'payroll', 'departments'].map(id => item(id)).join('')}${item('records', dg.pending ? dg.pending + ' waiting' : '')}</div>
+    return `<div class="sheet-group">${['scan', 'closing', 'claims', 'payments', 'expenses', 'payroll', 'departments'].map(id => item(id)).join('')}${item('records', dg.pending ? dg.pending + ' waiting' : '')}</div>
       ${logs.length ? `<div class="sheet-label">Recent chats</div><div class="sheet-group">${logs.map(l => `<button class="sheet-item" data-log="${l.id}">${icon('spark')}<span>${RR.esc(l.title)}</span></button>`).join('')}</div>` : ''}
       <div class="sheet-group"><button class="sheet-item" data-act="new-chat">${icon('plus')}<span>New chat</span></button><button class="sheet-item" data-act="reset">${icon('refresh')}<span>Reset demo data</span></button></div>
       <div class="sheet-who"><div class="avatar" aria-hidden="true">A</div><div class="who"><b>Asim</b><span>RR Hospitals</span></div></div>`;
@@ -71,7 +72,7 @@
     $('dock-toggle').setAttribute('aria-pressed', String(showDock));
     $('dock-toggle').style.display = st.page === 'copilot' ? 'none' : '';
     $('ask-trigger').style.display = st.page === 'copilot' ? 'none' : '';
-    const hasPeriod = !['copilot', 'patients', 'records', 'payroll'].includes(st.page);
+    const hasPeriod = !['copilot', 'patients', 'records', 'payroll', 'scan', 'claims', 'closing', 'proposal'].includes(st.page);
     $('period').style.display = hasPeriod ? '' : 'none';
     $('app').classList.toggle('has-period', hasPeriod);
     if (st.page === 'copilot') { scroll.innerHTML = RR.pages.copilot(); scroll.style.overflow = 'hidden'; }
@@ -94,7 +95,7 @@
         if (RR.Chat.busy && page !== st.page && (st.page === 'copilot' || page === 'copilot')) { st.dock = true; }
         if (st.page === 'copilot' && page !== 'copilot') st.dock = o.keepDock || st.dock || RR.Chat.msgs.length > 0;
       } else st.dock = false;
-      closeMore();
+      closeMore(); if (RR.drawerOpen()) RR.closeDrawer();
       st.page = page; $('app').classList.remove('side-open'); $('side-scrim').classList.remove('open');
       history.replaceState(null, '', '#' + page);
       render();
@@ -142,6 +143,11 @@
     if (d.approve) { const x = RR.db.expenses.find(v => v.id === d.approve), snap = RR.snapshot(); x.status = 'approved'; return App.commit(x.id + ' approved', snap); }
     if (d.delExp) { const snap = RR.snapshot(); RR.db.expenses = RR.db.expenses.filter(v => v.id !== d.delExp); return App.commit(d.delExp + ' deleted', snap); }
     if (d.review) return RR.forms.paperReview(d.review);
+    if (d.scanSample) return RR.scanSample(d.scanSample);
+    if (d.tallyDl) { const e = RR.downloadTally(d.tallyDl); return RR.toast(`Tally file saved · ${e.sales} sales, ${e.receipts} receipts`); }
+    if (d.settle) return RR.forms.settle(d.settle);
+    if (d.claimFilter) { S.claimFilter = d.claimFilter; return App.refresh(); }
+    if (d.closeDay != null) { S.closeDay = d.closeDay || null; return App.go('closing'); }
     switch (d.act) {
       case 'more': return $('more').classList.contains('open') ? closeMore() : openMore();
       case 'new-chat': closeMore(); RR.Chat.reset(); if (st.page !== 'copilot' && !st.dock) App.go('copilot'); else App.logsChanged(); return;
@@ -154,10 +160,14 @@
       case 'new-patient': return RR.forms.patient();
       case 'new-paper': return RR.forms.paperNew();
       case 'export': return exportCSV();
+      case 'tally': return RR.forms.tally();
+      case 'scan-post': return RR.scanPost();
+      case 'scan-undo': return RR.scanUndo();
+      case 'scan-again': return RR.scanReset();
       case 'digitise-clean': { const snap = RR.snapshot(); const ids = RR.db.paper.filter(p => p.status === 'pending' && !RR.parsePaper(p.text).missing.length).map(p => p.id); ids.forEach(id => RR.commitPaper(id)); return App.commit(ids.length + ' records digitised', snap); }
       case 'more-bills': S.billLimit += 40; return billTableOnly();
       case 'run-payroll': { const snap = RR.snapshot(), month = RR.todayISO.slice(0, 7); RR.db.runs.unshift({ month, date: RR.todayISO, total: RR.payrollMonthly(), staff: RR.db.staff.length }); return App.commit('Payroll run for ' + RR.db.staff.length + ' staff', snap); }
-      case 'reset': closeMore(); if (confirm('Reset all demo data to the original sample? Your changes will be lost.')) { RR.reset(); RR.Chat.msgs = []; if (RR.Chat.root) RR.Chat.reset(); App.refresh(); RR.toast('Demo data reset'); } return;
+      case 'reset': closeMore(); if (confirm('Reset all demo data to the original sample? Your changes will be lost.')) { RR.reset(); RR.scanReset && Object.assign(RR.scanState, { stage: 'pick' }); S.closeDay = null; RR.Chat.msgs = []; if (RR.Chat.root) RR.Chat.reset(); App.refresh(); RR.toast('Demo data reset'); } return;
     }
   }
 
@@ -167,10 +177,20 @@
     RR.bindDrawer();
     document.addEventListener('click', onClick);
     $('side-scrim').onclick = () => { $('app').classList.remove('side-open'); $('side-scrim').classList.remove('open'); };
+    document.addEventListener('change', e => {
+      if (e.target.id === 'scan-file' && e.target.files[0]) return RR.scanFile(e.target.files[0]);
+      if (e.target.dataset.scanOn != null) { RR.scanState.rows[+e.target.dataset.scanOn].on = e.target.checked; return App.refresh(); }
+      if (e.target.dataset.scanF) { RR.scanEdit(e.target.dataset.scanF, e.target.value); return App.refresh(); }
+    });
+    document.addEventListener('submit', e => { if (e.target.id === 'close-form') { e.preventDefault(); RR.submitClosing(e.target); } });
+    /* drag a photo onto the scan page */
+    document.addEventListener('dragover', e => { if (e.target.closest && e.target.closest('#scan-drop')) { e.preventDefault(); e.target.closest('#scan-drop').classList.add('over'); } });
+    document.addEventListener('dragleave', e => { const z = e.target.closest && e.target.closest('#scan-drop'); if (z) z.classList.remove('over'); });
+    document.addEventListener('drop', e => { const z = e.target.closest && e.target.closest('#scan-drop'); if (z && e.dataTransfer.files[0]) { e.preventDefault(); RR.scanFile(e.dataTransfer.files[0]); } });
     let qT; document.addEventListener('input', e => { if (e.target.id === 'bill-q') { S.billQuery = e.target.value; S.billLimit = 40; clearTimeout(qT); qT = setTimeout(billTableOnly, 120); } });
     document.addEventListener('keydown', e => {
       const mod = e.metaKey || e.ctrlKey;
-      if (e.key === 'Escape') { if (closeMore()) return; if (RR.drawerOpen()) return RR.closeDrawer(); if ($('app').classList.contains('side-open')) return $('side-scrim').onclick(); }
+      if (e.key === 'Escape') { if (closeMore()) return; if (st.page === 'proposal' && !RR.drawerOpen()) return App.go('overview'); if (RR.drawerOpen()) return RR.closeDrawer(); if ($('app').classList.contains('side-open')) return $('side-scrim').onclick(); }
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); st.page === 'copilot' ? RR.Chat.focus() : App.ask(); }
     });
     const h = location.hash.slice(1); st.page = RR.pages[h] && h !== 'billingTable' ? h : 'copilot';

@@ -5,7 +5,7 @@
    ============================================================ */
 (function () {
   const RR = (window.RR = window.RR || {});
-  const KEY = 'rr-hospitals-db-v4';
+  const KEY = 'rr-hospitals-db-v5';
 
   /* ---------- dates ---------- */
   const pad = n => String(n).padStart(2, '0');
@@ -147,6 +147,30 @@
     raw.sort((a, b) => a.date.localeCompare(b.date));
     const invoices = raw.map((x, i) => ({ id: 'INV-' + (2001 + i), ...x }));
 
+    /* insurance claims, one per insured bill: pending with the TPA, queried, settled, or settled short */
+    const QUERIES = ['Discharge summary not attached', 'Pre-authorisation number missing', 'Itemised pharmacy bill requested', 'Investigation reports requested', 'Policy waiting period under review', 'Room rent above eligibility'];
+    const DEDUCT = ['Non-payable consumables', 'Room rent proportionate deduction', 'Co-pay 10%', 'Pharmacy above package rate'];
+    const claims = [];
+    invoices.forEach(inv => {
+      if (!inv.insurance || inv.status === 'draft') return;
+      const submitted = iso(addDays(parse(inv.date), 1 + Math.floor(r() * 3)));
+      const c = { id: 'CLM-' + (7001 + claims.length), invoiceId: inv.id, patient: inv.patient, dept: inv.dept, payer: inv.payer, amount: inv.insurance, submitted, status: 'pending', settled: 0, settledOn: null, note: '' };
+      if (submitted > todayISO) c.submitted = todayISO;
+      if (inv.status === 'paid') {
+        c.status = 'settled'; c.settled = inv.insurance; c.settledOn = inv.paidOn;
+        if (inv.payer !== 'PM-JAY' && inv.payer !== 'CGHS' && r() < 0.22) { c.status = 'short'; c.settled = Math.round((inv.insurance * (0.78 + r() * 0.17)) / 100) * 100; c.note = pick(DEDUCT); }
+      } else if (daysBetween(c.submitted, todayISO) > 95) { c.status = r() < 0.3 ? 'short' : 'settled'; c.settled = c.status === 'short' ? Math.round((inv.insurance * 0.85) / 100) * 100 : inv.insurance; c.settledOn = iso(addDays(parse(c.submitted), 30 + Math.floor(r() * 50))); if (c.status === 'short') c.note = pick(DEDUCT); }
+      else if (daysBetween(c.submitted, todayISO) > 6 && r() < 0.32) { c.status = 'queried'; c.note = pick(QUERIES); }
+      claims.push(c);
+    });
+
+    /* daily closing: what the cashier counted against what the ledger says, last 7 days closed */
+    const closings = {};
+    for (let k = 1; k <= 7; k++) {
+      const d = iso(addDays(TODAY, -k)), off = k === 3 ? -500 : k === 5 ? 200 : 0;
+      closings[d] = { closed: true, by: 'Front desk', at: '21:' + (10 + k * 4), diff: { cash: off, upi: 0, card: 0 } };
+    }
+
     const expenses = [];
     for (let k = 0; k < 12; k++) {
       const ms = new Date(TODAY.getFullYear(), TODAY.getMonth() - k, 1);
@@ -173,17 +197,19 @@
 
     const paper = PAPER.map((p, i) => ({ id: 'PR-' + (101 + i), source: p[0], text: p[1], status: 'pending', invoiceId: null }));
 
-    return { v: 4, patients, invoices, expenses, staff, runs, paper, seededOn: todayISO };
+    return { v: 5, patients, invoices, expenses, staff, runs, paper, claims, closings, seededOn: todayISO };
   }
 
   /* ---------- store ---------- */
   function refreshStatuses(db) {
+    const byId = new Map(db.invoices.map(i => [i.id, i]));
+    (db.claims || []).forEach(c => { const i = byId.get(c.invoiceId); if (!i) return; if (i.status === 'void') c.status = 'void'; else if (i.status === 'paid' && (c.status === 'pending' || c.status === 'queried')) { c.status = 'settled'; c.settled = c.amount; c.settledOn = i.paidOn; } });
     db.invoices.forEach(i => { if ((i.status === 'pending' || i.status === 'overdue')) i.status = i.due < todayISO ? 'overdue' : 'pending'; });
   }
   RR.load = function () {
     let db = null;
     try { db = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { db = null; }
-    if (!db || db.v !== 4) db = seed();
+    if (!db || db.v !== 5) db = seed();
     refreshStatuses(db);
     RR.db = db;
     return db;
