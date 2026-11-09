@@ -184,7 +184,8 @@
     const inv = RR.db.invoices.filter(i => i.patientId === p.id && i.status !== 'void').sort((a, b) => b.date.localeCompare(a.date));
     const bal = RR.patientBalance(p.id), paid = inv.filter(i => i.status === 'paid').reduce((a, i) => a + i.amount, 0);
     return {
-      text: [`**${p.name}** (${p.sex}, ${p.age ?? '—'}) · ${p.mrn} · ${p.dept}. ${inv.length} bills, ${inr(paid)} paid${bal ? `, **${inr(bal)}** outstanding` : ', nothing outstanding'}. Last visit ${inv[0] ? RR.date(inv[0].date) : '—'}.`],
+      text: [bal ? `**${p.name}** owes **${inr(bal)}** right now${(() => { const od = inv.filter(i => i.status === 'overdue'); return od.length ? `, and ${od.length === 1 ? 'one bill is' : od.length + ' bills are'} past due` : ''; })()}.` : `**${p.name}** is all paid up. Nothing outstanding. 👍`,
+        `${p.sex === 'F' ? 'She' : 'He'}'s ${p.age ?? ''}${p.age ? ', ' : ''}under ${p.dept} (${p.mrn}), with ${inv.length} bill${inv.length === 1 ? '' : 's'} so far and ${inr(paid)} paid in total. Last visit was ${inv[0] ? RR.date(inv[0].date) : 'not on record'}.`],
       blocks: wantsTable(s) ? [blk('Bills', openLink('patients', 'Open patients'), invoiceTable(inv.slice(0, 8), true), { flush: 1 })] : [],
     };
   }
@@ -268,10 +269,11 @@
      ctx remembers the last topic + period, so follow-ups like
      "pull up the chart", "and this week?" or "list them" continue it. */
   const ctx = (RR.chatCtx = { topic: null, period: null });
-  const FOLLOW = /^(and |what about |how about |now |ok |also )?(pull (it |that |them )?up|show (it|that|them|me)|chart( it)?|graph( it)?|plot it|as a (chart|graph|table|list)|list (them|those|it)|the (chart|graph|list|table)|break ?down|details|more|(for |in )?(today|this week|this month|this year|the week|the month|the year|week|month|year))\b/;
+  const FOLLOW = /^(and |what about |how about |now |ok |also )?(pull (it |that |them )?up|show (it|that|them|me|the (chart|graph|table|list|trend))|(pull up|see) the (chart|graph|table|list|trend)|chart( it)?|graph( it)?|plot it|as a (chart|graph|table|list)|list (them|those|it)|the (chart|graph|list|table)|break ?down|details|more|(for |in )?(today|this week|this month|this year|the week|the month|the year|week|month|year))\b/;
   function route(q) {
     const s = q.toLowerCase().trim(), named = RR.periodFrom(s);
-    const follow = ctx.topic && FOLLOW.test(s) && s.split(/\s+/).length <= 8 && !(named && !ctx.periodic);
+    const TOPIC = /\b(claims?|tpa|insur|overdue|owe|owed|outstanding|expenses?|budget|payroll|salar|doctors?|dr|shift|patients?|closing|drawer|cash|tally|duplicate|forecast|risk|departments?|profit|loss|losing|payers?|scan|register|paper)\b/;
+    const follow = ctx.topic && FOLLOW.test(s) && s.split(/\s+/).length <= 8 && !(named && !ctx.periodic) && !(TOPIC.test(s.replace(FOLLOW, '')) && !/^(and |what about |how about )/.test(s));
     const p = named || (follow && ctx.period) || RR.period;
     if (follow) { ctx.period = p; return ctx.topic(p, s); }
     const out = dispatch(q, s, p, named);
@@ -282,7 +284,7 @@
     if (/^(help|hi|hello|hey|what can you|how do i)/.test(s)) { ctx.topic = null; return help(); }
     const inv = findInvoice(q);
     if (inv) {
-      if (inv.missing) return { text: [`There is no **${inv.missing}** in the ledger.`] };
+      if (inv.missing) return { text: [`I couldn’t find **${inv.missing}** in the ledger. Could the number be slightly different? Invoice numbers here run from ${RR.db.invoices[0].id} to ${RR.db.invoices[RR.db.invoices.length - 1].id}.`] };
       if (/\b(paid|settle|received|collect|mark)/.test(s) && (inv.status === 'pending' || inv.status === 'overdue')) return { text: [`Recording a payment on **${inv.id}** for ${inv.patient}.`], blocks: [markPaidAction(inv)] };
       return invoiceDetail(inv);
     }
@@ -292,24 +294,25 @@
     for (const h of RR.extraIntents || []) { const r = h(q, s, p, named); if (r) return r; }
     if (/\btally\b|accountant|\bxml\b|export (to|for) (the )?account/.test(s)) return tally(p);
     if (/\bclaims?\b|\btpa\b|stuck|short.?paid|quer(y|ied)|settle/.test(s)) { remember((pp, ss) => claims(ss), p); return claims(s); }
-    if (/clos(e|ing)|drawer|cash ?(in|at) (the )?(hand|desk|counter)|reconcil|tally up|match(es|ed)? the|counter/.test(s)) { remember((pp, ss) => closing(ss), p); return closing(s); }
+    if (/clos(e|ing)|drawer|cash ?(in|at) (the )?(hand|desk|counter)|\b(cash|upi|card|money|collection)\b.*\b(match|matched|tally|short|over|add up|balance)\b|reconcil|tally up|match(es|ed)? the|counter/.test(s)) { remember((pp, ss) => closing(ss), p); return closing(s); }
     if (/\b(photo|picture|camera|scan) (a |the |of )?(page|register)|scan a page/.test(s)) return { text: ['Open **Scan a page**, take a photo of the register and each line comes back as a draft bill to check and approve.'], blocks: [{ html: openLink('scan', 'Scan a page') }] };
     if (/digiti|paper|register|scan|handwritten/.test(s)) return digitise(s);
     if (/duplicate|double.?(bill|charg)/.test(s)) { remember((pp, ss) => duplicates(ss), p); return duplicates(s); }
     if (/denial|risk|reject/.test(s)) { remember((pp, ss) => risk(ss), p); return risk(s); }
     if (/forecast|predict|next month|projection|project\b/.test(s)) { remember((pp, ss) => forecast(ss), p); return forecast(s); }
-    if (/overdue|owed|outstanding|receivable|aging|ageing|unpaid|remind|chase/.test(s)) { remember((pp, ss) => overdue(q, ss), p); return overdue(q, s); }
+    { const pt0 = findPatient(q); if (pt0 && /\b(owe|owes|owed|owing|balance|due|outstanding|pay|paid|bills?|account|history|details|profile|visit)\b/.test(s)) { remember((pp, ss) => patientProfile(pt0, ss), p); return patientProfile(pt0, s); } }
+    if (/overdue|owed|\bowes?\b|owing|outstanding|receivable|aging|ageing|unpaid|remind|chase/.test(s)) { remember((pp, ss) => overdue(q, ss), p); return overdue(q, s); }
     if (/budget|spend|expense|pharmac|vendor|purchase|cost/.test(s) && !/overview|summar/.test(s)) { remember(expenses, p); return expenses(p, s); }
     if (/payer|\bpays?\b|paid by|how fast|insur|upi|method|tpa|pm-?jay|cghs|days to pay|collection/.test(s)) { remember(payers, p); return payers(p, s); }
-    if (/losing|profit|margin|p&l|loss|departments\b|by department/.test(s)) { remember(deptPL, p); return deptPL(p, s); }
+    if (/losing|profit|margin|p&l|loss|departments\b|by department/.test(s) || /\b(department|dept)s?\b.*\b(best|worst|top|strongest|weakest|most|least|doing)\b|\b(best|worst|top|strongest|weakest)\b.*\bdepartments?\b/.test(s)) { remember(deptPL, p); return deptPL(p, s); }
     const pt = findPatient(q);
     if (pt) { remember((pp, ss) => patientProfile(pt, ss), p); return patientProfile(pt, s); }
     const d = findDept(q);
     if (d) { const f = (pp, ss) => deptDetail(d, pp, ss); f.periodic = true; remember(f, p); return deptDetail(d, p, s); }
-    if (/\bbill(s|ing|ed)?\b|invoice|revenue|sales|income/.test(s)) { remember(billing, p); return billing(p, s); }
+    if (/\bbill(s|ing|ed)?\b|invoice|revenue|sales|income|turnover/.test(s)) { remember(billing, p); return billing(p, s); }
     if (/overview|summar|how are we|how did we|doing|brief|status|cash|numbers|report|dashboard/.test(s) || named) { remember(overview, p); return overview(p, s); }
     if (wantsChart(s)) { remember(overview, p); return overview(p, s); }
-    return { text: ['I couldn’t match that to the ledger. Try “billing today”, “overview this month”, a patient name or an invoice number.'] };
+    return { fallback: true, text: [] };
   }
   RR.route = route;
   RR.chatKit = { blk, openLink, wantsChart, wantsTable, findPatient, remember: (fn, p) => { fn.periodic = true; remember(fn, p); }, cap };

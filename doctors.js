@@ -154,6 +154,7 @@
         (sum.withDoctor.length ? ` ${sum.withDoctor[0].patient} is with them now` : '') + (sum.waiting.length ? `${sum.withDoctor.length ? ' and' : ''} ${sum.waiting.length} ${sum.waiting.length === 1 ? 'is' : 'are'} waiting` : '') + (sum.withDoctor.length || sum.waiting.length ? '.' : ''));
       const parts = [sum.newPts && `${sum.newPts} new OPD`, sum.followUps && `${sum.followUps} follow-up${sum.followUps === 1 ? '' : 's'}`, sum.admitted && `${sum.admitted} admitted`].filter(Boolean);
       if (parts.length) t.push(`${RR.chatKit.cap(parts.join(', '))}. Consultation fees ${inr(sum.fees)}.`);
+      if (/waiting|queue/.test(s) && !sum.waiting.length && !sum.withDoctor.length) t.push(live ? 'Nobody is waiting for them right now.' : 'Nobody is waiting; they’re off shift right now.');
     }
     const blocks = [];
     if (K.wantsTable(s) || /\bwho|which patients|names\b/.test(s)) blocks.push(K.blk(`${doc.name} · ${w.label} shift`, dayWord(day), RR.table(sum.visits, [{ h: 'Time', f: v => esc(v.time) }, { h: 'Patient', f: v => `${esc(v.patient)}<span class="sub">${esc(v.type)}</span>` }, { h: 'Reason', f: v => esc(v.reason) }, { h: 'Status', f: v => visitBadge(v.status) }], { compact: 1, empty: 'No patients in this shift' }), { flush: 1 }));
@@ -184,7 +185,7 @@
   const visitBadge = st => (st === 'seen' ? '<span class="badge badge-solid">Seen</span>' : st === 'with doctor' ? '<span class="badge badge-soft">With doctor</span>' : '<span class="badge badge-outline">Waiting</span>');
   RR.visitBadge = visitBadge;
 
-  const DOCQ = /\b(doctor|doctors|dr|shift|attended|consult(ed|ations)?|seen|saw|see|visits?|opd|on duty|on call|rounds|busiest|workload)\b/;
+  const DOCQ = /\b(doctor|doctors|dr|shift|attended|consult(ed|ations)?|seen|saw|see|visits?|opd|on duty|on call|rounds|busiest|workload|waiting|queue|with)\b/;
   (RR.extraIntents = RR.extraIntents || []).push((q, s, p) => {
     if (/\b(which|what) doctor|who (saw|treated|attended|is seeing|consulted)|doctor did .* see/.test(s)) {
       const pt = RR.chatKit.findPatient(q) || (() => { const t = ' ' + s.replace(/[^a-z\s]/g, ' ') + ' ', hit = RR.db.visits.find(v => t.includes(' ' + v.patient.toLowerCase() + ' ')); return hit ? { id: null, name: hit.patient } : null; })();
