@@ -1,6 +1,6 @@
 /* RR Hospitals — network first, cached copy when offline */
-const CACHE = 'rr-v8';
-const FILES = ['./', 'index.html', 'styles.css', 'data.js', 'ui.js', 'intents.js', 'copilot.js', 'pages.js', 'forms.js', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'iso.js', 'config.js', 'finance.js', 'pages2.js', 'samples/scans.js', 'samples/opd.jpg', 'samples/ward.jpg', 'samples/casualty.jpg'];
+const CACHE = 'rr-v9';
+const FILES = ['./', 'index.html', 'styles.css', 'data.js', 'ui.js', 'intents.js', 'copilot.js', 'pages.js', 'forms.js', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'iso.js', 'config.js', 'finance.js', 'pages2.js', 'doctors.js', 'samples/scans.js', 'samples/opd.jpg', 'samples/ward.jpg', 'samples/casualty.jpg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

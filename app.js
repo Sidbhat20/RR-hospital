@@ -7,7 +7,7 @@
 
   const NAV = [
     ['copilot', 'Ask', 'spark'], ['overview', 'Overview', 'home'], ['billing', 'Billing', 'receipt'], ['closing', 'Daily closing', 'cash'], ['claims', 'Insurance claims', 'shield'], ['payments', 'Payments', 'card'],
-    ['expenses', 'Expenses', 'wallet'], ['payroll', 'Payroll', 'users'], ['patients', 'Patients', 'heart'], ['departments', 'Departments', 'building'], ['scan', 'Scan a page', 'camera'], ['records', 'Paper records', 'scan'],
+    ['expenses', 'Expenses', 'wallet'], ['payroll', 'Payroll', 'users'], ['patients', 'Patients', 'heart'], ['doctors', 'Doctors', 'steth'], ['departments', 'Departments', 'building'], ['scan', 'Scan a page', 'camera'], ['records', 'Paper records', 'scan'],
   ];
   const HIDDEN = { proposal: 'Proposal' };
   const TITLES = Object.assign(Object.fromEntries(NAV.map(n => [n[0], n[1]])), HIDDEN);
@@ -34,7 +34,7 @@
   function moreHTML() {
     const dg = RR.digitisation(), logs = RR.Chat.logs().slice(0, 6);
     const item = (id, sub) => { const n = NAV.find(x => x[0] === id); return `<button class="sheet-item" data-nav="${id}"${st.page === id ? ' aria-current="page"' : ''}>${icon(n[2])}<span>${n[1]}</span>${sub ? `<em>${sub}</em>` : ''}</button>`; };
-    return `<div class="sheet-group">${['scan', 'closing', 'claims', 'payments', 'expenses', 'payroll', 'departments'].map(id => item(id)).join('')}${item('records', dg.pending ? dg.pending + ' waiting' : '')}</div>
+    return `<div class="sheet-group">${['scan', 'doctors', 'closing', 'claims', 'payments', 'expenses', 'payroll', 'departments'].map(id => item(id)).join('')}${item('records', dg.pending ? dg.pending + ' waiting' : '')}</div>
       ${logs.length ? `<div class="sheet-label">Recent chats</div><div class="sheet-group">${logs.map(l => `<button class="sheet-item" data-log="${l.id}">${icon('spark')}<span>${RR.esc(l.title)}</span></button>`).join('')}</div>` : ''}
       <div class="sheet-group"><button class="sheet-item" data-act="new-chat">${icon('plus')}<span>New chat</span></button><button class="sheet-item" data-act="reset">${icon('refresh')}<span>Reset demo data</span></button></div>
       <div class="sheet-who"><div class="avatar" aria-hidden="true">A</div><div class="who"><b>Asim</b><span>RR Hospitals</span></div></div>`;
@@ -72,7 +72,7 @@
     $('dock-toggle').setAttribute('aria-pressed', String(showDock));
     $('dock-toggle').style.display = st.page === 'copilot' ? 'none' : '';
     $('ask-trigger').style.display = st.page === 'copilot' ? 'none' : '';
-    const hasPeriod = !['copilot', 'patients', 'records', 'payroll', 'scan', 'claims', 'closing', 'proposal'].includes(st.page);
+    const hasPeriod = !['copilot', 'patients', 'records', 'payroll', 'scan', 'claims', 'closing', 'proposal', 'doctors'].includes(st.page);
     $('period').style.display = hasPeriod ? '' : 'none';
     $('app').classList.toggle('has-period', hasPeriod);
     if (st.page === 'copilot') { scroll.innerHTML = RR.pages.copilot(); scroll.style.overflow = 'hidden'; }
@@ -146,6 +146,7 @@
     if (d.scanSample) return RR.scanSample(d.scanSample);
     if (d.tallyDl) { const e = RR.downloadTally(d.tallyDl); return RR.toast(`Tally file saved · ${e.sales} sales, ${e.receipts} receipts`); }
     if (d.settle) return RR.forms.settle(d.settle);
+    if (d.doc) { S.docId = d.doc; S.docDay = null; return App.refresh(); }
     if (d.claimFilter) { S.claimFilter = d.claimFilter; return App.refresh(); }
     if (d.closeDay != null) { S.closeDay = d.closeDay || null; return App.go('closing'); }
     switch (d.act) {
@@ -161,6 +162,7 @@
       case 'new-paper': return RR.forms.paperNew();
       case 'export': return exportCSV();
       case 'tally': return RR.forms.tally();
+      case 'log-visit': return RR.visitForm();
       case 'scan-post': return RR.scanPost();
       case 'scan-undo': return RR.scanUndo();
       case 'scan-again': return RR.scanReset();
@@ -180,6 +182,7 @@
     document.addEventListener('change', e => {
       if (e.target.id === 'scan-file' && e.target.files[0]) return RR.scanFile(e.target.files[0]);
       if (e.target.dataset.scanOn != null) { RR.scanState.rows[+e.target.dataset.scanOn].on = e.target.checked; return App.refresh(); }
+      if (e.target.hasAttribute('data-doc-day')) { S.docDay = e.target.value; return App.refresh(); }
       if (e.target.dataset.scanF) { RR.scanEdit(e.target.dataset.scanF, e.target.value); return App.refresh(); }
     });
     document.addEventListener('submit', e => { if (e.target.id === 'close-form') { e.preventDefault(); RR.submitClosing(e.target); } });

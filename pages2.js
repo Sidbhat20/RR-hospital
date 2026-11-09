@@ -176,3 +176,39 @@
       <p class="slide-foot">${esc(p.contact)}</p></div><button class="slide-x" data-nav="overview" aria-label="Close slide">${icon('x')}</button></div>`;
   };
 })();
+
+/* ================= Doctors: shifts and who saw whom ================= */
+(function () {
+  const RR = window.RR, { icon, esc, inr } = RR, P = RR.pages, S = RR.pageState;
+  S.docId = S.docId || null; S.docDay = S.docDay || null;
+  const head = (t, sub, a) => `<div class="head"><div><h1>${esc(t)}</h1><p>${sub}</p></div>${a ? `<div class="actions">${a}</div>` : ''}</div>`;
+  P.doctors = () => {
+    const docs = RR.doctors(), sel = docs.find(d => d.id === S.docId) || docs[0];
+    const day = S.docDay || RR.currentShiftDay(sel), sum = RR.shiftSummary(sel, day), w = sum.win;
+    const all = docs.map(d => RR.shiftSummary(d, RR.currentShiftDay(d)));
+    const days = Array.from({ length: 7 }, (_, k) => RR.iso(RR.addDays(RR.parse(RR.currentShiftDay(sel)), -k)));
+    const live = day === RR.currentShiftDay(sel) && RR.onShiftNow(sel);
+    return `<div class="page">${head('Doctors', 'Who is on shift, and which patients each doctor has seen.', `<button class="btn btn-primary" data-act="log-visit">${icon('plus')}Log a visit</button>`)}
+      ${RR.kpiStrip([{ label: 'Seen this shift', value: all.reduce((a, r) => a + r.seen.length, 0) + '', note: 'All doctors, current or last shift' }, { label: 'Waiting now', value: all.reduce((a, r) => a + r.waiting.length, 0) + '' },
+        { label: 'On shift now', value: docs.filter(RR.onShiftNow).length + ' of ' + docs.length }, { label: 'Busiest', value: esc(all.slice().sort((a, b) => b.seen.length - a.seen.length)[0].doc.name.replace(/^Dr\.?\s*/, 'Dr ')), note: all.slice().sort((a, b) => b.seen.length - a.seen.length)[0].seen.length + ' patients' }])}
+      <div class="doc-grid">
+        <section class="card flush doc-list" aria-label="Doctors">${all.map(r => `<button class="doc-row${r.doc.id === sel.id ? ' on' : ''}" data-doc="${r.doc.id}" aria-pressed="${r.doc.id === sel.id}">
+          <span class="doc-n"><b>${esc(r.doc.name)}</b><span>${esc(r.doc.dept)} · ${r.win.label} ${r.win.fromLabel}–${r.win.toLabel}</span></span>
+          <span class="doc-c">${RR.onShiftNow(r.doc) ? '<i class="live" aria-label="On shift"></i>' : ''}<b>${r.seen.length}</b><span>seen</span></span></button>`).join('')}</section>
+        <section class="card flush">
+          <div class="card-h"><div><h2>${esc(sel.name)} · ${w.label} shift</h2><p>${live ? 'On shift now · ' : ''}${RR.date(day)} · ${w.fromLabel}–${w.toLabel}${sum.seen.length ? ` · ${sum.seen.length} seen${sum.waiting.length ? `, ${sum.waiting.length} waiting` : ''}` : ''}</p></div>
+            <select class="select doc-day" data-doc-day aria-label="Shift day">${days.map(d => `<option value="${d}"${d === day ? ' selected' : ''}>${d === RR.currentShiftDay(sel) ? (live ? 'Current shift' : 'Latest shift') : RR.date(d)}</option>`).join('')}</select></div>
+          ${RR.table(sum.visits, [{ h: 'Time', f: v => esc(v.time) }, { h: 'Patient', f: v => `${esc(v.patient)}<span class="sub">${esc(v.type)}</span>` }, { h: 'Reason', f: v => esc(v.reason) }, { h: 'Status', f: v => RR.visitBadge(v.status) }],
+            { compact: 1, empty: RR.parse(day).getDay() === 0 && sel.dept !== 'Emergency' && sel.dept !== 'Maternity' ? 'Not on shift · Sunday' : 'No patients yet this shift', art: 'calendar' })}
+        </section></div></div>`;
+  };
+  RR.visitForm = () => {
+    const docs = RR.doctors(), on = docs.find(RR.onShiftNow) || docs[0];
+    const f = (n, l, i) => `<div class="f"><label for="f-${n}">${l}</label>${i}<div class="err" id="err-${n}"></div></div>`;
+    RR.drawer('Log a visit', 'Records that a doctor has seen a patient, in their current shift',
+      f('doc', 'Doctor', `<select class="select" id="f-doc" name="doc">${docs.map(d => `<option value="${d.id}"${d.id === (S.docId || on.id) ? ' selected' : ''}>${esc(d.name)} · ${esc(d.dept)}</option>`).join('')}</select>`) +
+      f('pt', 'Patient', `<select class="select" id="f-pt" name="pt">${RR.db.patients.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}">${esc(p.name)} · ${p.mrn}</option>`).join('')}</select>`) +
+      `<div class="f-row">${f('reason', 'Reason', '<input class="input" id="f-reason" name="reason" placeholder="e.g. Chest pain">')}${f('type', 'Type', '<select class="select" id="f-type" name="type"><option>OPD</option><option>Follow-up</option><option>Admitted</option></select>')}</div>`,
+      'Log visit', d => { const snap = RR.snapshot(), v = RR.logVisit(d.doc, d.pt, d.reason.trim(), d.type); S.docId = d.doc; S.docDay = null; RR.App.commit(`${v.patient} logged with ${v.doctor}`, snap); });
+  };
+})();

@@ -31,3 +31,14 @@ Uploading that same file (or any file named `rr-page.jpg`) reads as the prepared
 ## Make it theirs (edit before the meeting)
 - `config.js`: hospital name, city, Tally ledger names, the proposal's weeks and price.
 - `data.js`: `DEPTS`, `STAFF` (doctors) and `SERVICES` (price ranges). Bump `KEY` to `rr-hospitals-db-v6` after changing them so every browser reseeds.
+
+## Doctors and shifts
+Ask in chat, for example:
+- "How many patients has Dr Vikram Menon attended in his shift?"
+- "Who did Dr Kiran Bhat see last night?" (lists the patients)
+- "How many patients has the cardiologist seen this week?"
+- "Which doctor saw Priya Shah?"
+- "How many patients have the doctors seen today?" / "Who is on shift now?"
+
+The **Doctors** page shows each doctor's shift, a live dot for who's on now, and the patient list for any of the last 7 shifts. **Log a visit** adds one.
+Shifts are set in `doctors.js` (`SHIFTS`, `ROSTER`). Morning 08–14, evening 14–20, night 20–08. A night shift belongs to the day it started.

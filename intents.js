@@ -289,6 +289,7 @@
     if (/^(bill|charge|raise|invoice)\b.*(₹|rs|\d)/.test(s) || /\b(bill|charge)\b [a-z]+ [a-z]+ .*(₹|rs\.?\s?\d|\d)/.test(s) && !/\bbills?\b (today|this)/.test(s)) return createInvoice(q);
     if (/^(log|record|add)\b.*(expense|spend|purchase|restock|₹|\d)/.test(s)) return logExpense(q);
     if (/payroll|salar|staff cost/.test(s)) return payroll(s);
+    for (const h of RR.extraIntents || []) { const r = h(q, s, p, named); if (r) return r; }
     if (/\btally\b|accountant|\bxml\b|export (to|for) (the )?account/.test(s)) return tally(p);
     if (/\bclaims?\b|\btpa\b|stuck|short.?paid|quer(y|ied)|settle/.test(s)) { remember((pp, ss) => claims(ss), p); return claims(s); }
     if (/clos(e|ing)|drawer|cash ?(in|at) (the )?(hand|desk|counter)|reconcil|tally up|match(es|ed)? the|counter/.test(s)) { remember((pp, ss) => closing(ss), p); return closing(s); }
@@ -311,4 +312,5 @@
     return { text: ['I couldn’t match that to the ledger. Try “billing today”, “overview this month”, a patient name or an invoice number.'] };
   }
   RR.route = route;
+  RR.chatKit = { blk, openLink, wantsChart, wantsTable, findPatient, remember: (fn, p) => { fn.periodic = true; remember(fn, p); }, cap };
 })();
