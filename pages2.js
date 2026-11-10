@@ -34,8 +34,10 @@
     }
 
     /* draft */
-    if (s.unknown) return `<div class="page">${head('Couldn’t read this page', 'This photo isn’t one of the prepared pages.', '<button class="btn btn-outline" data-act="scan-again">Try another</button>')}
-      <div class="scan-grid">${img}<section class="card"><p class="lead">In the live system the page goes to the handwriting reader. For this demo, enter its lines by hand or pick a sample page.</p><div class="done-act"><button class="btn btn-primary" data-act="new-paper">${icon('plus')}Enter a line by hand</button></div></section></div></div>`;
+    if (s.unknown) return `<div class="page">${head('Couldn’t read this page clearly', 'The photo is too blurred, angled or dark to read the lines reliably.', '<button class="btn btn-outline" data-act="scan-again">Try another photo</button>')}
+      <div class="scan-grid">${img}<section class="card"><p class="lead">For the best read, lay the register flat, fill the frame with one page, and take the photo in good light without a shadow across it.</p>
+      <ul class="scan-tips"><li>Hold the phone straight above the page, not at an angle</li><li>Turn off the flash if it leaves a white glare</li><li>One page per photo; avoid catching the facing page</li></ul>
+      <div class="done-act"><button class="btn btn-primary" data-act="scan-again">${icon('camera')}Take another photo</button><button class="btn btn-outline" data-act="new-paper">${icon('plus')}Enter the lines by hand</button></div></section></div></div>`;
     const rows = s.rows, checks = rows.filter(r => r.check && r.check.length && !r.ok).length;
     const total = rows.filter(r => r.on).reduce((a, r) => a + (+r.amount || 0), 0);
     const cell = (r, i, k, input) => `<td data-label="${k[1]}" class="${r.check && r.check.includes(k[0]) && !r.ok ? 'unsure' : ''}">${input}</td>`;

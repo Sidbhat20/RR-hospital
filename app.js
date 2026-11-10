@@ -169,7 +169,7 @@
       case 'digitise-clean': { const snap = RR.snapshot(); const ids = RR.db.paper.filter(p => p.status === 'pending' && !RR.parsePaper(p.text).missing.length).map(p => p.id); ids.forEach(id => RR.commitPaper(id)); return App.commit(ids.length + ' records digitised', snap); }
       case 'more-bills': S.billLimit += 40; return billTableOnly();
       case 'run-payroll': { const snap = RR.snapshot(), month = RR.todayISO.slice(0, 7); RR.db.runs.unshift({ month, date: RR.todayISO, total: RR.payrollMonthly(), staff: RR.db.staff.length }); return App.commit('Payroll run for ' + RR.db.staff.length + ' staff', snap); }
-      case 'reset': closeMore(); if (confirm('Reset all demo data to the original sample? Your changes will be lost.')) { RR.reset(); RR.scanReset && Object.assign(RR.scanState, { stage: 'pick' }); S.closeDay = null; RR.Chat.msgs = []; if (RR.Chat.root) RR.Chat.reset(); App.refresh(); RR.toast('Demo data reset'); } return;
+      case 'reset': closeMore(); if (confirm('Start fresh? This puts the ledger back to its starting figures.')) { RR.reset(); RR.scanReset && Object.assign(RR.scanState, { stage: 'pick' }); S.closeDay = null; RR.Chat.msgs = []; if (RR.Chat.root) RR.Chat.reset(); App.refresh(); RR.toast('Demo data reset'); } return;
     }
   }
 

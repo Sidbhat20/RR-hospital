@@ -5,7 +5,7 @@
    ============================================================ */
 (function () {
   const RR = (window.RR = window.RR || {});
-  const KEY = 'rr-hospitals-db-v5';
+  const KEY = 'rr-hospitals-db-v6';
 
   /* ---------- dates ---------- */
   const pad = n => String(n).padStart(2, '0');
@@ -21,7 +21,9 @@
   /* ---------- reference data ---------- */
   const DEPTS = ['Cardiology', 'Orthopedics', 'Oncology', 'Emergency', 'Maternity', 'Radiology', 'Neurology', 'Pediatrics'];
   const DEPT_W = [['Cardiology', 18], ['Orthopedics', 15], ['Oncology', 14], ['Emergency', 14], ['Maternity', 12], ['Radiology', 11], ['Neurology', 9], ['Pediatrics', 7]];
-  const SERVICES = { 'Consultation': [1500, 3500], 'Lab Panel': [4000, 12000], 'Imaging': [8000, 28000], 'Therapy': [15000, 45000], 'Inpatient Stay': [60000, 240000], 'Surgery': [150000, 550000] };
+  /* Price ranges in ₹, set to a mid-size Bengaluru hospital and matched to the sample register pages.
+     Swap in RR's real rate card here (and bump KEY below so browsers reseed). */
+  const SERVICES = { 'Consultation': [500, 1200], 'Lab Panel': [300, 3500], 'Imaging': [600, 9000], 'Therapy': [1500, 25000], 'Inpatient Stay': [8000, 90000], 'Surgery': [25000, 250000] };
   const SERVICE_W = [['Consultation', 30], ['Lab Panel', 22], ['Imaging', 18], ['Therapy', 12], ['Inpatient Stay', 11], ['Surgery', 7]];
   const INSURERS = ['Star Health', 'HDFC ERGO', 'Niva Bupa', 'ICICI Lombard', 'PM-JAY', 'CGHS'];
   const CATEGORIES = ['Supplies', 'Pharmacy', 'Equipment', 'Facilities', 'IT'];
@@ -107,13 +109,13 @@
     });
 
     const raw = [];
-    for (let i = 0; i < 640; i++) {
-      const age = Math.floor(365 * Math.pow(r(), 1.2));
+    for (let i = 0; i < 2600; i++) {
+      const age = 45 + Math.floor(320 * Math.pow(r(), 1.2)); // the last 45 days come from the day-by-day desk traffic below
       const date = addDays(TODAY, -age);
       const p = pick(patients);
       const service = p.dept === 'Radiology' ? 'Imaging' : wpick(SERVICE_W);
       const [lo, hi] = SERVICES[service];
-      const amount = between(lo, hi, lo >= 50000 ? 1000 : 100);
+      const amount = between(lo, hi, lo >= 8000 ? 500 : 50);
       let payer = 'Self-pay', insurance = 0;
       if (r() > 0.35) { payer = pick(INSURERS); insurance = (payer === 'PM-JAY' || payer === 'CGHS') ? amount : Math.round((amount * (0.55 + r() * 0.35)) / 100) * 100; }
       const paidProb = age > 60 ? 0.96 : age > 30 ? 0.82 : age > 15 ? 0.62 : 0.38;
@@ -128,12 +130,12 @@
     }
     // a working day's traffic for the last two weeks, so Today and This week read like a real desk
     for (let age = 0; age < 45; age++) {
-      const n = age === 0 ? 9 : 1 + Math.floor(r() * 3);
+      const n = age === 0 ? 22 : 12 + Math.floor(r() * 9);
       for (let j = 0; j < n; j++) {
         const date = addDays(TODAY, -age), p = pick(patients);
-        const service = p.dept === 'Radiology' ? 'Imaging' : wpick([['Consultation', 40], ['Lab Panel', 25], ['Imaging', 18], ['Therapy', 10], ['Inpatient Stay', 5], ['Surgery', 2]]);
+        const service = p.dept === 'Radiology' ? 'Imaging' : wpick([['Consultation', 36], ['Lab Panel', 22], ['Imaging', 16], ['Therapy', 11], ['Inpatient Stay', 10], ['Surgery', 5]]);
         const [lo, hi] = SERVICES[service];
-        const amount = between(lo, hi, lo >= 50000 ? 1000 : 100);
+        const amount = between(lo, hi, lo >= 8000 ? 500 : 50);
         let payer = 'Self-pay', insurance = 0;
         if (r() > 0.55) { payer = pick(INSURERS); insurance = (payer === 'PM-JAY' || payer === 'CGHS') ? amount : Math.round((amount * (0.55 + r() * 0.35)) / 100) * 100; }
         const paid = r() < (insurance ? 0.25 : 0.7);
@@ -197,7 +199,7 @@
 
     const paper = PAPER.map((p, i) => ({ id: 'PR-' + (101 + i), source: p[0], text: p[1], status: 'pending', invoiceId: null }));
 
-    return { v: 5, patients, invoices, expenses, staff, runs, paper, claims, closings, seededOn: todayISO };
+    return { v: 6, patients, invoices, expenses, staff, runs, paper, claims, closings, seededOn: todayISO };
   }
 
   /* ---------- store ---------- */

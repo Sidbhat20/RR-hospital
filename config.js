@@ -22,9 +22,11 @@ window.RR.CONFIG = {
     deductions: 'TPA Deductions',                  // Indirect Expenses
   },
 
-  /* Closing slide (#proposal). Placeholder figures — set the real offer. */
+  /* Closing slide (#proposal).
+     ⚠ PRICE IS NOT CONFIRMED — set price and priceNote to the offer you actually want on screen.
+     8 weeks covers billing, claims, scanning and Tally together; drop to 6 only if you're sure. */
   proposal: {
-    weeks: 6,
+    weeks: 8,
     price: '₹3,50,000',
     priceNote: 'one-time setup, then ₹18,000 a month',
     phase1: ['Billing, receipts and daily closing', 'Insurance claims and TPA follow-up', 'Paper registers scanned into the ledger', 'Tally export for the accounts team'],
