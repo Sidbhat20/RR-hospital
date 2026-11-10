@@ -192,7 +192,12 @@
       if (pt) return whoSawPatient(pt, s);
     }
     const doc = RR.findDoctor(q);
-    if (doc && DOCQ.test(s)) { const f = (pp, ss) => doctorShiftAnswer(doc, ss); RR.chatKit.remember(f, p); return doctorShiftAnswer(doc, s); }
+    if (doc && /\b(who is|who's|whos|tell me about|about|profile|which department|what department|when (is|does)|what shift|timing|timings|hours)\b/.test(s) && !/\b(see|saw|seen|patients|attended)\b/.test(s)) {
+      const w = RR.shiftWindow(doc, RR.todayISO), on = RR.onShiftNow(doc), sum = RR.shiftSummary(doc, RR.currentShiftDay(doc));
+      return { text: [`**${doc.name}** is our ${doc.role.toLowerCase()} in ${doc.dept}. ${doc.name.includes('Leela') || doc.name.includes('Ananya') || doc.name.includes('Hana') ? 'She' : 'He'} works the ${w.label.toLowerCase()} shift, ${w.fromLabel}–${w.toLabel}.`,
+        on ? `On shift right now, with ${sum.seen.length} patient${sum.seen.length === 1 ? '' : 's'} seen so far${sum.waiting.length ? ` and ${sum.waiting.length} waiting` : ''}.` : `Off shift right now. Last shift: ${sum.seen.length} patients seen.`] };
+    }
+    if (doc && (DOCQ.test(s) || s.replace(/[^a-z\s]/g, ' ').trim().split(/\s+/).length <= 4)) { const f = (pp, ss) => doctorShiftAnswer(doc, ss); RR.chatKit.remember(f, p); return doctorShiftAnswer(doc, s); }
     if (/\b(which|what) doctor|who (saw|treated|attended|is seeing|consulted)|doctor did .* see/.test(s)) { const pt = RR.chatKit.findPatient(q); if (pt) return whoSawPatient(pt, s); }
     if (/\b(doctors?|on duty|on shift|shifts?)\b/.test(s) && /\b(how many|patients|who|which|all|each|every|busiest|today|now|shift|list|chart)\b/.test(s) && !/salar|payroll|pay\b/.test(s)) { const f = (pp, ss) => allDoctorsAnswer(ss); RR.chatKit.remember(f, p); return allDoctorsAnswer(s); }
     return null;

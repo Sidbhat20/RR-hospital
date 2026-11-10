@@ -5,7 +5,7 @@
    ============================================================ */
 (function () {
   const RR = (window.RR = window.RR || {});
-  const KEY = 'rr-hospitals-db-v6';
+  const KEY = 'rr-hospitals-db-v7';
 
   /* ---------- dates ---------- */
   const pad = n => String(n).padStart(2, '0');
@@ -103,7 +103,13 @@
     const wpick = pairs => { const tot = pairs.reduce((s, p) => s + p[1], 0); let x = r() * tot; for (const p of pairs) { if ((x -= p[1]) < 0) return p[0]; } return pairs[0][0]; };
     const between = (a, b, step) => Math.round((a + r() * (b - a)) / step) * step;
 
-    const patients = NAMES.map((n, i) => {
+    // the 40 named regulars, plus a few hundred more so no one patient carries a silly number of bills
+    const FN_M = ['Venkatesh', 'Srinivas', 'Naveen', 'Girish', 'Prashanth', 'Mohammed', 'Basavaraj', 'Shivakumar', 'Chandru', 'Anand', 'Ramesh', 'Yusuf', 'Kiran', 'Lokesh', 'Joseph', 'Mahadev', 'Harsha', 'Praveen', 'Rakesh', 'Sunil'];
+    const FN_F = ['Lakshmamma', 'Shilpa', 'Kavitha', 'Sumathi', 'Rekha', 'Nasreen', 'Geetha', 'Roopa', 'Mamatha', 'Pavithra', 'Mary', 'Jyothi', 'Anitha', 'Shobha', 'Usha', 'Vidya', 'Bhagya', 'Sowmya', 'Ayesha', 'Chaitra'];
+    const LN = ['Gowda', 'Reddy', 'Hegde', 'Shetty', 'Patil', 'Naik', 'Murthy', 'Kamath', 'Prabhu', 'Swamy', 'Khan', 'Pasha', 'Fernandes', 'Kulkarni', 'Bhat', 'Achar', 'Nayak', 'Rao', 'Iyengar', 'Shenoy'];
+    const seen = new Set(NAMES.map(n => n[0])), extra = [];
+    while (extra.length < 560) { const f = r() < 0.5, n = (f ? FN_F : FN_M)[Math.floor(r() * 20)] + ' ' + LN[Math.floor(r() * 20)]; if (!seen.has(n)) { seen.add(n); extra.push([n, f ? 'F' : 'M']); } }
+    const patients = NAMES.concat(extra).map((n, i) => {
       const dept = wpick(DEPT_W);
       return { id: 'PT-' + (1001 + i), name: n[0], sex: n[1], age: dept === 'Pediatrics' ? 2 + Math.floor(r() * 13) : 19 + Math.floor(r() * 60), dept, mrn: 'RR' + (240100 + i), source: 'digital' };
     });
@@ -112,7 +118,7 @@
     for (let i = 0; i < 2600; i++) {
       const age = 45 + Math.floor(320 * Math.pow(r(), 1.2)); // the last 45 days come from the day-by-day desk traffic below
       const date = addDays(TODAY, -age);
-      const p = pick(patients);
+      const p = r() < 0.08 ? patients[Math.floor(r() * 40)] : pick(patients);
       const service = p.dept === 'Radiology' ? 'Imaging' : wpick(SERVICE_W);
       const [lo, hi] = SERVICES[service];
       const amount = between(lo, hi, lo >= 8000 ? 500 : 50);
@@ -132,7 +138,7 @@
     for (let age = 0; age < 45; age++) {
       const n = age === 0 ? 22 : 12 + Math.floor(r() * 9);
       for (let j = 0; j < n; j++) {
-        const date = addDays(TODAY, -age), p = pick(patients);
+        const date = addDays(TODAY, -age), p = r() < 0.08 ? patients[Math.floor(r() * 40)] : pick(patients);
         const service = p.dept === 'Radiology' ? 'Imaging' : wpick([['Consultation', 36], ['Lab Panel', 22], ['Imaging', 16], ['Therapy', 11], ['Inpatient Stay', 10], ['Surgery', 5]]);
         const [lo, hi] = SERVICES[service];
         const amount = between(lo, hi, lo >= 8000 ? 500 : 50);
@@ -199,7 +205,7 @@
 
     const paper = PAPER.map((p, i) => ({ id: 'PR-' + (101 + i), source: p[0], text: p[1], status: 'pending', invoiceId: null }));
 
-    return { v: 6, patients, invoices, expenses, staff, runs, paper, claims, closings, seededOn: todayISO };
+    return { v: 7, patients, invoices, expenses, staff, runs, paper, claims, closings, seededOn: todayISO };
   }
 
   /* ---------- store ---------- */

@@ -136,7 +136,7 @@
     if (dm && !RR.findDoctor(q)) {
       const nm = dm[1][0].toUpperCase() + dm[1].slice(1);
       const near = RR.doctors().find(d => d.name.toLowerCase().replace(/^dr\.?\s*/, '').split(' ').some(w => dist(w, dm[1], 2) <= 2));
-      if (near) return say(`I don’t see a Dr ${nm}. Did you mean **${near.name}** (${near.dept})? If so, just ask again with that name.`);
+      if (near) { const q0 = s; mem.pending = { kind: 'confirm', run: () => route2(withDoctor(q0, near, [dm[1]]), withDoctor(q0, near, [dm[1]]), q0) }; return say(`I don’t see a Dr ${nm}. Did you mean **${near.name}** (${near.dept})?`); }
       return say(`I don’t see a Dr ${nm} on the roster. 🤔`, `The doctors here are ${RR.doctors().map(d => d.name.replace(/^Dr\.?\s*/, 'Dr ')).join(', ')}. Which one did you mean?`);
     }
     const pm = q.match(/\b(?:does|did|is|for|of|about|patient)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
@@ -153,11 +153,83 @@
     );
   }
 
-  RR.route = function (q) {
-    const raw = String(q || '');
+  /* ---------- conversation memory ---------- */
+  const mem = (RR.talkMem = { pending: null, doc: null, patient: null });
+  const YES = /^(yes|yeah|yea|yep|yup|ya|yah|haan|ha|han|ji|correct|right|exactly|that one|that's (him|her|right|the one)|thats (him|her|right)|yes please|yes pls|sure|ok yes|yess+|y)\b/;
+  const NO = /^(no|nope|nah|not (him|her|that one)|wrong|neither|none)\b/;
+
+  /* ---------- fuzzy doctor / patient resolution ---------- */
+  const dname = d => d.name.toLowerCase().replace(/^dr\.?\s*/, '').split(/\s+/);
+  const tol = w => (w.length >= 6 ? 2 : w.length >= 4 ? 1 : 0);
+  const COMMON = new Set(WORDS);
+  function fuzzyDoctor(s) {
+    const toks = s.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && w !== 'dr' && w !== 'doctor');
+    const score = new Map();
+    for (const d of RR.doctors()) {
+      const parts = dname(d); let hit = 0, used = [];
+      for (const t of toks) {
+        if (COMMON.has(t) && !parts.includes(t)) continue;
+        const best = Math.min(...parts.map(p => (t === p ? 0 : dist(t, p, 2))));
+        if (best === 0 || best <= tol(t)) { hit += best === 0 ? 3 : 2 - best * 0.5; used.push(t); }
+      }
+      if (hit) score.set(d, { hit, used });
+    }
+    const ranked = [...score.entries()].sort((a, b) => b[1].hit - a[1].hit);
+    if (!ranked.length) return null;
+    if (ranked.length > 1 && ranked[0][1].hit === ranked[1][1].hit) return { ambiguous: ranked.filter(r => r[1].hit === ranked[0][1].hit).map(r => r[0]) };
+    return { doc: ranked[0][0], used: ranked[0][1].used };
+  }
+  function fuzzyPatient(s) {
+    const t = s.replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim(), words = t.split(' ');
+    const names = [...new Set([...RR.db.patients.map(p => p.name), ...RR.db.visits.map(v => v.patient)])];
+    let best = null, bd = 9;
+    for (let i = 0; i < words.length - 1; i++) {
+      const pair = words[i] + ' ' + words[i + 1];
+      if (COMMON.has(words[i]) || pair.length < 7) continue;
+      for (const n of names) { const d = dist(pair, n.toLowerCase(), 3); if (d < bd) { bd = d; best = { name: n, pair }; } }
+    }
+    return best && bd <= (best.name.length >= 10 ? 3 : 2) ? best : null;
+  }
+  const withDoctor = (s, doc, used) => {
+    const full = dname(doc).join(' ');
+    let done = false;
+    let out = s.replace(/[a-z]+/g, w => (used.includes(w) ? (done ? '' : ((done = true), full)) : w)).replace(/\s+/g, ' ');
+    if (!/\b(dr|doctor)\b/.test(out)) out = 'dr ' + out;
+    return out;
+  };
+  const isDoctorish = s => /\b(dr|doctor|doc|shift|attended|seen|saw|see|patients|duty|opd)\b/.test(s);
+
+  function answer(raw) {
     const st = smallTalk(raw);
     if (st) return st;
-    const fixed = RR.fixTypos(raw), s = fixed.toLowerCase();
+    let fixed = RR.fixTypos(raw), s = fixed.toLowerCase(), note = null;
+
+    // he / she → the last doctor or patient we talked about
+    if (/\b(he|she|him|her|his)\b/.test(s) && !RR.findDoctor(fixed) && !RR.chatKit.findPatient(fixed)) {
+      if (mem.doc) { fixed = s = s + ' dr ' + dname(mem.doc).join(' '); }
+      else if (mem.patient) { fixed = s = s + ' ' + mem.patient.toLowerCase(); }
+    }
+    // a doctor's name typed slightly wrong: answer for the obvious one, ask only when it's a real toss-up
+    if (isDoctorish(s) && !RR.findDoctor(fixed)) {
+      const f = fuzzyDoctor(s);
+      if (f && f.doc) { fixed = s = withDoctor(s, f.doc, f.used); note = `I think you mean **${f.doc.name}** (${f.doc.dept}).`; }
+      else if (f && f.ambiguous) {
+        const opts = f.ambiguous;
+        mem.pending = { kind: 'choose', opts, q: s };
+        return say(`Did you mean ${opts.slice(0, -1).map(d => `**${d.name}**`).join(', ')} or **${opts[opts.length - 1].name}**? Just say the name.`);
+      }
+    }
+    // a patient's name typed slightly wrong
+    if (!RR.chatKit.findPatient(fixed) && !RR.findDoctor(fixed) && !/\b(dr|doctor)\b/.test(s)) {
+      const fp = fuzzyPatient(s);
+      if (fp && fp.name.toLowerCase() !== fp.pair) { fixed = s = s.replace(fp.pair, fp.name.toLowerCase()); note = `I think you mean **${fp.name}**.`; }
+    }
+    const out = route2(fixed, s, raw);
+    if (note && out.text && !out.talk) out.text = [note, ...out.text];
+    return out;
+  }
+
+  function route2(fixed, s, raw) {
     let out = direct(fixed, s);
     if (!out && /\b(?:dr|doctor)\.?\s+[a-z]{3,}/.test(s) && !RR.findDoctor(fixed)) out = unknownName(fixed, s);
     if (!out) { // a Capitalised full name that isn't anyone we know
@@ -168,5 +240,31 @@
     if (!out) out = base(fixed);
     if (!out || out.fallback) out = fallback(raw, fixed);
     return out;
+  }
+
+  RR.route = function (q) {
+    const raw = String(q || ''), s = S(raw);
+    // answering a question we just asked
+    if (mem.pending) {
+      const pend = mem.pending; mem.pending = null;
+      if (pend.kind === 'confirm' && YES.test(s)) return finish(pend.run());
+      if (pend.kind === 'confirm' && NO.test(s)) return say(pend.no || 'No problem. Who did you mean? Type the name as best you can and I’ll find them.');
+      if (pend.kind === 'choose') {
+        const pickd = pend.opts.find(d => dname(d).some(w => s.includes(w)));
+        if (pickd) return finish(route2(withDoctor(pend.q, pickd, dname(pickd).concat(pend.opts.flatMap(dname))), pend.q, raw));
+        if (NO.test(s)) return say('No problem. Which doctor did you mean?');
+      }
+    }
+    if (YES.test(s) && s.split(' ').length <= 3) return say(pick(['Great! What would you like me to look up?', 'Sure. What can I check for you?']));
+    if (NO.test(s) && s.split(' ').length <= 3) return say('Okay! Let me know if there’s anything else you need.');
+    return finish(answer(raw));
   };
+  // remember who the answer was about, so "he", "she" and "yes" work next
+  function finish(out) {
+    const t = (out.text || []).join(' ');
+    const d = RR.doctors().find(x => t.includes(x.name));
+    if (d && !/^The doctors here|has \*\*\d+ doctors\*\*/.test(t)) { mem.doc = d; mem.patient = null; }
+    else { const p = RR.db.patients.find(x => t.includes('**' + x.name + '**')) || RR.db.visits.find(v => t.includes('**' + v.patient + '**')); if (p) { mem.patient = p.name || p.patient; mem.doc = null; } }
+    return out;
+  }
 })();
